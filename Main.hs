@@ -10,7 +10,12 @@ main = do
   let files = drop 2 allFiles
   texts <- mapM (readFile . ("./jsons/" ++)) files
   let res = zip files (map valid texts)
-  mapM_ print res
+
+  ff <- readFile "test.json"
+  mapM_ print ff
+  print (runParser parseVal ff)
+
+-- mapM_ print res
 
 data Pair = Pair Key Value
   deriving (Show)
@@ -27,22 +32,22 @@ data Value
   deriving (Show)
 
 valid :: String -> Bool
-valid xs = case runParser parseObj xs of
-                Just(_, "") -> True
-                otherwise -> False
+valid xs = case runParser parseVal xs of
+  Just (_, "") -> True
+  _ -> False
 
 parseObj :: Parser [Pair]
 parseObj =
-  (\_ y _ -> y)
-    <$> (spaces *> char '{' <* spaces)
-    <*> ( atleast0 (parsePair <* char ',' <* spaces)
-            >>= ( \x ->
-                    if null x
-                      then (: []) <$> parsePair <|> pure []
-                      else (\y -> x ++ [y]) <$> parsePair
-                )
+  ( (\_ _ -> [])
+      <$> (spaces *> char '{' <* spaces)
+      <*> (spaces *> char '}' <* spaces)
+  )
+    <|> ( (\_ x y _ -> x ++ [y])
+            <$> (spaces *> char '{' <* spaces)
+            <*> atleast0 (const <$> parsePair <*> char ',' <* spaces)
+            <*> parsePair
+            <*> (spaces *> char '}' <* spaces)
         )
-    <*> (spaces *> char '}' <* spaces)
 
 parsePair :: Parser Pair
 parsePair =
@@ -56,17 +61,23 @@ parseKey = Key <$> parseString
 
 parseVal :: Parser Value
 parseVal =
-  S <$> parseString
-    <|> N <$> parseNumber
-    <|> L <$> parseLiteral
+  O <$> parseObj
     <|> A <$> parseArray
-    <|> O <$> parseObj
+    <|> N <$> parseNumber
+    <|> S <$> parseString
+    <|> L <$> parseLiteral
 
 parseString :: Parser String
-parseString = (\_ y _ -> y) <$> char '"' <*> atleast0 (satisfy (/= '"')) <*> char '"'
+parseString =
+  (\_ y _ -> y)
+    <$> (spaces *> char '"')
+    <*> atleast0 (satisfy isLegal)
+    <*> (char '"' <* spaces)
+  where
+    isLegal c = c == ' ' || not (c == '"'  || Char.isSpace c || Char.isControl c)
 
 parseNumber :: Parser String
-parseNumber = p5
+parseNumber = spaces *> p5 <* spaces
   where
     p1 = (\x y z -> x ++ y ++ z) <$> safeChar '-' <*> digits <*> safeChar '.'
     p2 = p1 >>= (\x -> if last x == '.' then (x ++) <$> digits else pure x)
@@ -74,25 +85,24 @@ parseNumber = p5
     p4 = p3 >>= (\x -> if last x == 'e' then (x ++) <$> safeChar '-' else pure x)
     p5 = p4 >>= (\x -> if last x == 'e' || last x == '-' then (x ++) <$> digits else pure x)
 
-
 parseLiteral :: Parser String
 parseLiteral =
-  (join4 <$> char 't' <*> char 'r' <*> char 'u' <*> char 'e')
-    <|> (join5 <$> char 'f' <*> char 'a' <*> char 'l' <*> char 's' <*> char 'e')
-    <|> (join4 <$> char 'n' <*> char 'u' <*> char 'l' <*> char 'l')
+  (join4 <$> (spaces *> char 't') <*> char 'r' <*> char 'u' <*> (char 'e' <* spaces))
+    <|> (join5 <$> (spaces *> char 'f') <*> char 'a' <*> char 'l' <*> char 's' <*> (char 'e' <* spaces))
+    <|> (join4 <$> (spaces *> char 'n') <*> char 'u' <*> char 'l' <*> (char 'l' <* spaces))
   where
     join4 a b c d = [a] ++ [b] ++ [c] ++ [d]
     join5 a b c d e = [a] ++ [b] ++ [c] ++ [d] ++ [e]
 
 parseArray :: Parser [Value]
 parseArray =
-  (\_ y _ -> y)
-    <$> (char '[' <* spaces)
-    <*> ( atleast0 (parseVal <* char ',' <* spaces)
-            >>= ( \x ->
-                    if null x
-                      then (: []) <$> parseVal <|> pure []
-                      else (\y -> x ++ [y]) <$> parseVal
-                )
+  ( (\_ _ -> [])
+      <$> (spaces *> char '[' <* spaces)
+      <*> (spaces *> char ']' <* spaces)
+  )
+    <|> ( (\_ x y _ -> x ++ [y])
+            <$> (spaces *> char '[' <* spaces)
+            <*> atleast0 (const <$> parseVal <*> char ',' <* spaces)
+            <*> parseVal
+            <*> (spaces *> char ']' <* spaces)
         )
-    <*> (spaces *> char ']')

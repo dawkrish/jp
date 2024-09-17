@@ -1,0 +1,13 @@
+parseObj :: Parser [Pair]
+parseObj =
+  (\_ y _ -> y)
+    <$> (spaces *> char '{' <* spaces)
+    <*> ( atleast0 (parsePair <* char ',' <* spaces)
+            >>= ( \x ->
+                    if null x
+                      then (: []) <$> parsePair <|> pure []
+                      else (\y -> x ++ [y]) <$> parsePair
+                )
+        )
+    <*> (spaces *> char '}' <* spaces)
+
