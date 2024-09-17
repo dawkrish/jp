@@ -71,10 +71,17 @@ parseString :: Parser String
 parseString =
   (\_ y _ -> y)
     <$> (spaces *> char '"')
-    <*> atleast0 (satisfy isLegal)
+    <*> ( (atleast0 (satisfy isLegal))
+            >>= ( \x ->
+                    if last x == '\\'
+                      --then (\y -> x ++ "hello") <$> (char 'r' <|> char 't')
+                      then error "x"
+                      else pure x
+                )
+        )
     <*> (char '"' <* spaces)
   where
-    isLegal c = c == ' ' || not (c == '"'  || Char.isSpace c || Char.isControl c)
+    isLegal c = c == ' ' || not (c == '"' || c == '\\' || Char.isSpace c || Char.isControl c)
 
 parseNumber :: Parser String
 parseNumber = spaces *> p5 <* spaces
